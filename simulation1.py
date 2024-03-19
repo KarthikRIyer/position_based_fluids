@@ -1,18 +1,19 @@
 import taichi as ti
 import numpy as np
 
-ti.init(arch=ti.cpu, cpu_max_num_threads=1)
-# ti.init(arch=ti.gpu)
+# ti.init(arch=ti.cpu, cpu_max_num_threads=1)
+ti.init(arch=ti.cpu)
 
-NUM_PARTICLES_ROW = 50
+NUM_PARTICLES_ROW = 100
 NUM_PARTICLES_COL = 30
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 
 # GUI
-WIDTH = 600
-HEIGHT = 600
+WIDTH = 800
+HEIGHT = 800
 BACKGROUND_COLOUR = 0xf0f0f0
 PARTICLE_COLOUR = 0x328ac1
+OBSTACLE_COLOUR = 0x333333
 PARTICLE_RADIUS = 4
 
 # parameters
@@ -42,6 +43,7 @@ paused = False
 attract = 0
 mouse_pos = (0, 0)
 
+
 # GPU variables
 x = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
 x_new = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
@@ -65,6 +67,10 @@ neighbours = ti.field(ti.i32, shape=(NUM_PARTICLES, MAX_NEIGHBOURS))
 num_neighbours = ti.field(ti.i32, shape=NUM_PARTICLES)
 x_display = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
 
+NUM_OBSTABLES = 3
+obstacles = ti.Vector.field(2, dtype=ti.f32, shape=NUM_OBSTABLES)
+obstacle_radius = ti.field(ti.f32, shape=NUM_OBSTABLES)
+MAX_OBSTACLE_NEIGHBOUR = 128
 
 @ti.kernel
 def reset_particles():
@@ -73,8 +79,8 @@ def reset_particles():
             # We add a random value so that they don't stack exact vertically
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.7 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.7 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][0] = 250 + j * (WIDTH/NUM_PARTICLES_COL) * 0.3 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][1] = 50 - i * (HEIGHT/30) * 0.3 + ti.random()
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             gradWx[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -85,15 +91,12 @@ def reset_particles():
             gradVz[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             f[i * NUM_PARTICLES_COL + j] = 0, 0
 
-    # for i in x:
-    #     w[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradWx[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradWy[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradWz[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradVx[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradVy[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     gradVz[i] = ti.Vector([0.0, 0.0, 0.0])
-    #     f[i] = ti.Vector([0.0, 0.0])
+    # obstacles[0] = (100, 200)
+    # obstacle_radius[0] = 50
+    obstacles[0] = (350, 400)
+    obstacle_radius[0] = 20
+    # obstacles[2] = (500, 180)
+    # obstacle_radius[2] = 40
 
 
 @ti.kernel
@@ -118,6 +121,7 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
         gradVy[i] = ti.Vector([0, 0, 0])
         gradVz[i] = ti.Vector([0, 0, 0])
 
+    circular_obstacle_collision()
     box_collision()
 
 
@@ -207,9 +211,9 @@ def spiky_grad_kernel(r):
     return ret_val
 
 
-@ti.func
-def isnan(x):
-    return not (x < 0 or 0 < x or x == 0)
+# @ti.func
+# def isnan(x):
+#     return not (x < 0 or 0 < x or x == 0)
 
 
 @ti.kernel
@@ -306,10 +310,35 @@ def box_collision():
             x_new[i][0] = PARTICLE_RADIUS + COLLISION_EPSILON * ti.random()
         if x_new[i][0] > WIDTH - PARTICLE_RADIUS:
             x_new[i][0] = WIDTH - PARTICLE_RADIUS - COLLISION_EPSILON * ti.random()
-        if x_new[i][1] < PARTICLE_RADIUS:
-            x_new[i][1] = PARTICLE_RADIUS + COLLISION_EPSILON * ti.random()
-        if x_new[i][1] > HEIGHT - PARTICLE_RADIUS:
-            x_new[i][1] = HEIGHT - PARTICLE_RADIUS + COLLISION_EPSILON * ti.random()
+        # if x_new[i][1] < PARTICLE_RADIUS:
+        #     x_new[i][1] = PARTICLE_RADIUS + COLLISION_EPSILON * ti.random()
+        # if x_new[i][1] > HEIGHT - PARTICLE_RADIUS:
+        #     x_new[i][1] = HEIGHT - PARTICLE_RADIUS + COLLISION_EPSILON * ti.random()
+
+
+@ ti.func
+def circular_obstacle_collision():
+    """
+    We use grid neighbour lookup again here.
+    Since an obstacle is (most of the type) larger than a grid, we need to check more grid cells
+    ((grid_radius*2) * ((grid_radius*2)) cells).
+    In those cells, we check each particle's position and move them outside the obstacle if they are inside
+    """
+    for i in range(NUM_OBSTABLES):
+        grid_radius = obstacle_radius[i] // GRID_SIZE + 1
+        grid_idx = int(obstacles[i] / GRID_SIZE)
+        for grid_y in range(-grid_radius, grid_radius + 1):
+            if 0 <= grid_idx[1] + grid_y < GRID_SHAPE[1]:
+                for grid_x in range(-grid_radius, grid_radius + 1):
+                    if 0 <= grid_idx[0] + grid_x < GRID_SHAPE[0]:
+                        for j in range(num_particles_in_grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y]):
+                            x1 = grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y, j]
+                            d = x_new[x1] - obstacles[i]
+                            r = d.norm()
+                            bound = obstacle_radius[i] + PARTICLE_RADIUS
+                            if r < bound:
+                                x_new[x1] = obstacles[i] + d / r * bound + COLLISION_EPSILON * ti.random()
+
 
 
 @ti.kernel
@@ -317,6 +346,8 @@ def update():
     for i in range(NUM_PARTICLES):
         v[i] = (x_new[i] - x[i]) / dt
         x[i] = x_new[i]
+
+    circular_obstacle_collision()
     box_collision()
 
     # The display uses coordinates from 0 to 1
@@ -338,6 +369,13 @@ def simulate(mouse_pos, attract):
 
 def render(gui):
     q = x_display.to_numpy()
+    obstacles_display = obstacles.to_numpy()
+    obstacles_display[:, 0] /= WIDTH
+    obstacles_display[:, 1] /= HEIGHT
+    obstacle_radius_display = obstacle_radius.to_numpy()
+    for i in range(NUM_OBSTABLES):
+        gui.circle(pos=obstacles_display[i], color=OBSTACLE_COLOUR,
+                   radius=obstacle_radius_display[i])
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
         r = int(abs(w[i][0]) * 1)
