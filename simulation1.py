@@ -4,7 +4,7 @@ import numpy as np
 # ti.init(arch=ti.cpu, cpu_max_num_threads=1)
 ti.init(arch=ti.cpu)
 
-NUM_PARTICLES_ROW = 100
+NUM_PARTICLES_ROW = 50
 NUM_PARTICLES_COL = 30
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 
@@ -28,7 +28,7 @@ SPIKY_GRAD_CONST = -45 / np.pi / KERNEL_SIZE ** 6
 GRID_SIZE = KERNEL_SIZE
 GRID_SHAPE = (WIDTH // GRID_SIZE + 1, HEIGHT // GRID_SIZE + 1)
 PARTICLE_MASS = 1.0
-RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.2
+RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.5
 COLLISION_EPSILON = 1e-3
 LAMBDA_EPSILON = 200
 S_CORR_DELTA_Q = 0.3
@@ -67,7 +67,7 @@ neighbours = ti.field(ti.i32, shape=(NUM_PARTICLES, MAX_NEIGHBOURS))
 num_neighbours = ti.field(ti.i32, shape=NUM_PARTICLES)
 x_display = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
 
-NUM_OBSTABLES = 3
+NUM_OBSTABLES = 1
 obstacles = ti.Vector.field(2, dtype=ti.f32, shape=NUM_OBSTABLES)
 obstacle_radius = ti.field(ti.f32, shape=NUM_OBSTABLES)
 MAX_OBSTACLE_NEIGHBOUR = 128
@@ -80,7 +80,7 @@ def reset_particles():
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
             x[i * NUM_PARTICLES_COL + j][0] = 250 + j * (WIDTH/NUM_PARTICLES_COL) * 0.3 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][1] = 50 - i * (HEIGHT/30) * 0.3 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/30) * 0.3 + ti.random()
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             gradWx[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -93,7 +93,7 @@ def reset_particles():
 
     # obstacles[0] = (100, 200)
     # obstacle_radius[0] = 50
-    obstacles[0] = (350, 400)
+    obstacles[0] = (350, 500)
     obstacle_radius[0] = 20
     # obstacles[2] = (500, 180)
     # obstacle_radius[2] = 40
@@ -383,10 +383,10 @@ def render(gui):
         b = int(abs(w[i][2]) * 1)
         # print(niCrossG[i])
         # b = int(0.0 * 255)
-        if (i == 1236):
-            r = 255
-            g = 0
-            b = 0
+        # if (i == 1236):
+        #     r = 255
+        #     g = 0
+        #     b = 0
         col = int("{0:02x}{1:02x}{2:02x}".format(max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255))), 16)
         # gui.circle(pos=q[i], color=PARTICLE_COLOUR, radius=PARTICLE_RADIUS)
         gui.circle(pos=q[i], color=col, radius=PARTICLE_RADIUS)
