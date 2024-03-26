@@ -3,9 +3,9 @@ import numpy as np
 
 ti.init(arch=ti.cpu, cpu_max_num_threads=1)
 # ti.init(arch=ti.gpu)
-
-NUM_PARTICLES_ROW = 50
-NUM_PARTICLES_COL = 30
+FRAME_ITER = 0
+NUM_PARTICLES_ROW = 70
+NUM_PARTICLES_COL = 100
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 
 # GUI
@@ -27,7 +27,7 @@ SPIKY_GRAD_CONST = -45 / np.pi / KERNEL_SIZE ** 6
 GRID_SIZE = KERNEL_SIZE
 GRID_SHAPE = (WIDTH // GRID_SIZE + 1, HEIGHT // GRID_SIZE + 1)
 PARTICLE_MASS = 1.0
-RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.2
+RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.15
 COLLISION_EPSILON = 1e-3
 LAMBDA_EPSILON = 200
 S_CORR_DELTA_Q = 0.3
@@ -73,8 +73,8 @@ def reset_particles():
             # We add a random value so that they don't stack exact vertically
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.7 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.7 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.9 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.9 + ti.random()
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             gradWx[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -148,10 +148,16 @@ def calculate_w():
         wDotDelV = ti.Vector(
             [w[x1].dot(gradVx[x1]), w[x1].dot(gradVy[x1]), w[x1].dot(gradVz[x1])])
         niCrossG[x1] = ni[x1].cross(ti.Vector([gravity[0], gravity[1], 0.0]))
-        delWDelT = wDotDelV + (0.5 * niCrossG[x1]) - vDotDelW
+        delWDelT = wDotDelV + (0.1 * niCrossG[x1]) - vDotDelW
         delW = (delWDelT * dt)
+        # dis = w[x1] * 0.1
         w[x1] += delW
-        # print(x1)
+        # w[x1] -= dis
+        if w[x1][2] > 100.0:
+            w[x1][2] = 20.0
+        elif w[x1][2] < -100.0:
+            w[x1][2] = -20.0
+        # print(w[x1])
         # print(gradWx[x1])
 
 
@@ -337,22 +343,25 @@ def simulate(mouse_pos, attract):
 
 
 def render(gui):
+    global FRAME_ITER
     q = x_display.to_numpy()
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
         r = int(abs(w[i][0]) * 1)
         g = int(abs(w[i][1]) * 1)
-        b = int(abs(w[i][2]) * 1)
+        b = int(abs(w[i][2]) * 20)
         # print(niCrossG[i])
         # b = int(0.0 * 255)
-        if (i == 1236):
-            r = 255
-            g = 0
-            b = 0
+        # if (i == 1236):
+        #     r = 255
+        #     g = 0
+        #     b = 0
         col = int("{0:02x}{1:02x}{2:02x}".format(max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255))), 16)
         # gui.circle(pos=q[i], color=PARTICLE_COLOUR, radius=PARTICLE_RADIUS)
         gui.circle(pos=q[i], color=col, radius=PARTICLE_RADIUS)
-    gui.show()
+    filename = f'./result/frame_{FRAME_ITER:05d}.png'
+    FRAME_ITER += 1
+    gui.show(filename)
 
 
 if __name__ == '__main__':
