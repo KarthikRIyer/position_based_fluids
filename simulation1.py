@@ -166,10 +166,10 @@ def calculate_w():
         # dis = w[x1] * 0.1
         w[x1] += delW
         # w[x1] -= dis
-        if w[x1][2] > 100.0:
-            w[x1][2] = 20.0
-        elif w[x1][2] < -100.0:
-            w[x1][2] = -20.0
+        # if w[x1][2] > 100.0:
+        #     w[x1][2] = 20.0
+        # elif w[x1][2] < -100.0:
+        #     w[x1][2] = -20.0
         # print(w[x1])
         # print(gradWx[x1])
 
