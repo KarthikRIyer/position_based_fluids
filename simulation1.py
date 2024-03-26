@@ -122,6 +122,19 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
 
 
 @ti.kernel
+def calculate_f_vort():
+
+    for x1 in x_new:
+        for i in range(num_neighbours[x1]):
+            x2 = neighbours[x1, i]
+            r = x_new[x1] - x_new[x2]
+            # vorticity force
+            fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
+                r.norm_sqr()))
+            f[x1] += ti.Vector([fVort[0], fVort[1]])
+
+
+@ti.kernel
 def calculate_w():
 
     for x1 in x_new:
@@ -239,9 +252,9 @@ def solve_iter():
             sum_grad_pk_C_sq += grad.norm_sqr()
             # rho_i += poly6_kernel(r.norm_sqr())
             rho_i[x1] += poly6_kernel(r.norm_sqr())
-            # vorti city force
-            fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr()))
-            f[x1] += ti.Vector([fVort[0], fVort[1]])
+            # # vorti city force
+            # fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr()))
+            # f[x1] += ti.Vector([fVort[0], fVort[1]])
         # if (f[x1][0] == float('nan') or f[x1][1] == float('nan')):
         # print(f[x1])
         # drag force
@@ -338,6 +351,7 @@ def simulate(mouse_pos, attract):
         find_neighbours()
         for _ in range(SOLVE_ITERS):
             solve_iter()
+        calculate_f_vort()
         calculate_w()
         update()
 
