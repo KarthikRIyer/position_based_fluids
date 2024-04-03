@@ -8,7 +8,7 @@ ti.init(arch=ti.cpu)
 
 FRAME_TICK = ti.field(ti.f32, shape=1)
 
-NUM_PARTICLES_ROW = 70
+NUM_PARTICLES_ROW = 20
 NUM_PARTICLES_COL = 100
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 NUM_VORTEX_PARTICLES = 100
@@ -206,28 +206,29 @@ def calculate_f_vort():
         # print(fDragFactor)
         # fDrag = -20.0 * v[x1] * fDragFactor
         # f[x1] += fDrag
-        for i in range(NUM_VORTEX_PARTICLES):
-            if isValidVort[i] == 0:
-                continue
-            r = x_new[x1] - xVort[i]
-            # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
-            fVort = ti.Vector([0.0, 0.0, 0.0])
-            if r.norm() < KERNEL_SIZE:
-                fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
-                # print(fVort)
-            # if r.norm_sqr() <= KERNEL_SIZE_SQR:
-            #     print('r {}', r.norm_sqr())
-            #     print('k {}', KERNEL_SIZE_SQR)
-            #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
-            f[x1] += ti.Vector([fVort[0], fVort[1]])
+        # for i in range(NUM_VORTEX_PARTICLES):
+        #     if isValidVort[i] == 0:
+        #         continue
+        #     r = x_new[x1] - xVort[i]
+        #     # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
+        #     fVort = ti.Vector([0.0, 0.0, 0.0])
+        #     if r.norm() < KERNEL_SIZE:
+        #         fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
+        #         # print(fVort)
+        #     # if r.norm_sqr() <= KERNEL_SIZE_SQR:
+        #     #     print('r {}', r.norm_sqr())
+        #     #     print('k {}', KERNEL_SIZE_SQR)
+        #     #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
+        #     f[x1] += ti.Vector([fVort[0], fVort[1]])
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
             # vorticity force
-            fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
-                r.norm_sqr()))
-            # print(fVort)
+            fVort = (w[x2].cross(ti.Vector([r[0], r[1], 0.0])) * 1.0)
             f[x1] += ti.Vector([fVort[0], fVort[1]])
+            # if fVort[1] != 0.0 or fVort[1] != -0.0:
+            #     print(fVort)
+            #     print(f[x1])
 
 
 @ti.kernel
@@ -268,6 +269,13 @@ def calculate_w():
         #     w[x1][2] = -20.0
         # print(w[x1])
         # print(gradWx[x1])
+
+        for i in range(NUM_VORTEX_PARTICLES):
+            if isValidVort[i] == 0:
+                continue
+            r = x_new[x1] - xVort[i]
+            if r.norm() < KERNEL_SIZE:
+                w[x1] += (wVort[i] * dt)
 
 
 @ti.kernel
@@ -547,18 +555,20 @@ def render(gui):
 
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
-        # r = int(abs(w[i][0]) * 1)
-        # g = int(abs(w[i][1]) * 1)
-        # b = int(abs(w[i][2]) * 20)
+        # print(f[i])
+        r = int(abs(w[i][0]) * 20)
+        g = int(abs(w[i][1]) * 20)
+        b = int(abs(w[i][2]) * 20)
+        # b = 0
         # print(niCrossG[i])
         # b = int(0.0 * 255)
         # if (i == 1236):
         #     r = 255
         #     g = 0
         #     b = 0
-        # col = int("{0:02x}{1:02x}{2:02x}".format(max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255))), 16)
-        gui.circle(pos=q[i], color=PARTICLE_COLOUR, radius=PARTICLE_RADIUS)
-        # gui.circle(pos=q[i], color=col, radius=PARTICLE_RADIUS)
+        col = int("{0:02x}{1:02x}{2:02x}".format(max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255))), 16)
+        # gui.circle(pos=q[i], color=PARTICLE_COLOUR, radius=PARTICLE_RADIUS)
+        gui.circle(pos=q[i], color=col, radius=PARTICLE_RADIUS)
     gui.show()
 
 
