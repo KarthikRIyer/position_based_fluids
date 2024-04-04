@@ -212,7 +212,7 @@ def calculate_f_vort():
             r = x_new[x1] - x_new[x2]
             # vorticity force
             fVort = (w[x2].cross(ti.Vector([r[0], r[1], 0.0])) * 1.0)
-            print(fVort)
+            # print(fVort)
             f[x1] += ti.Vector([fVort[0], fVort[1]])
 
 
@@ -243,7 +243,7 @@ def calculate_w():
         wDotDelV = ti.Vector(
             [w[x1].dot(gradVx[x1]), w[x1].dot(gradVy[x1]), w[x1].dot(gradVz[x1])])
         niCrossG[x1] = ni[x1].cross(ti.Vector([gravity[0], gravity[1], 0.0]))
-        delWDelT = wDotDelV + (0.5 * niCrossG[x1]) - vDotDelW
+        delWDelT = wDotDelV + (1 * niCrossG[x1]) - vDotDelW
         delW = (delWDelT * dt)
         w[x1] += delW
         # print(x1)
@@ -457,14 +457,15 @@ def obstacle_collision():
                             if r < bound:
                                 x_new[x1] = obstacleParticles[
                                                 i] + d / r * bound + COLLISION_EPSILON * ti.random()
-                            #     if obsTick[i] > VORT_EMIT_INTERVAL:
-                            #         oldIndex = ti.atomic_add(vortIndex[0], 1)
-                            #         xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
-                            #         # xVort[oldIndex] = x_new[x1]
-                            #         wVort[oldIndex] = 0, 0, -500
-                            #         # wVort[oldIndex] = 0, 0, 0
-                            #         isValidVort[oldIndex] = 1
-                            #         obsTick[i] = 0
+                                if obsTick[i] > VORT_EMIT_INTERVAL:
+                                    oldIndex = ti.atomic_add(vortIndex[0], 1)
+                                    xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
+                                    # xVort[oldIndex] = x_new[x1]
+                                    sign = 1.0 if d[0] > 0 else -1.0
+                                    wVort[oldIndex] = 0, 0, sign * 10
+                                    # wVort[oldIndex] = 0, 0, 0
+                                    isValidVort[oldIndex] = 1
+                                    obsTick[i] = 0
 
 
 
