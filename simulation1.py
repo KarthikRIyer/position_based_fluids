@@ -194,19 +194,19 @@ def calculate_f_vort():
         # print(fDragFactor)
         # fDrag = -20.0 * v[x1] * fDragFactor
         # f[x1] += fDrag
-        for i in range(NUM_VORTEX_PARTICLES):
-            if isValidVort[i] == 0:
-                continue
-            r = x_new[x1] - xVort[i]
-            # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
-            fVort = ti.Vector([0.0, 0.0, 0.0])
-            if r.norm() < KERNEL_SIZE:
-                fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
-            # if r.norm_sqr() <= KERNEL_SIZE_SQR:
-            #     print('r {}', r.norm_sqr())
-            #     print('k {}', KERNEL_SIZE_SQR)
-            #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
-            f[x1] += ti.Vector([fVort[0], fVort[1]])
+        # for i in range(NUM_VORTEX_PARTICLES):
+        #     if isValidVort[i] == 0:
+        #         continue
+        #     r = x_new[x1] - xVort[i]
+        #     # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
+        #     fVort = ti.Vector([0.0, 0.0, 0.0])
+        #     if r.norm() < KERNEL_SIZE:
+        #         fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
+        #     # if r.norm_sqr() <= KERNEL_SIZE_SQR:
+        #     #     print('r {}', r.norm_sqr())
+        #     #     print('k {}', KERNEL_SIZE_SQR)
+        #     #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
+        #     f[x1] += ti.Vector([fVort[0], fVort[1]])
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
@@ -248,6 +248,12 @@ def calculate_w():
         w[x1] += delW
         # print(x1)
         # print(gradWx[x1])
+        for i in range(NUM_VORTEX_PARTICLES):
+            if isValidVort[i] == 0:
+                continue
+            r = x_new[x1] - xVort[i]
+            if r.norm() < KERNEL_SIZE:
+                w[x1] += (wVort[i] * dt)
 
 
 @ti.kernel
@@ -462,12 +468,10 @@ def obstacle_collision():
                                     xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
                                     # xVort[oldIndex] = x_new[x1]
                                     sign = 1.0 if d[0] > 0 else -1.0
-                                    wVort[oldIndex] = 0, 0, sign * 10
+                                    wVort[oldIndex] = 0, 0, sign * 200
                                     # wVort[oldIndex] = 0, 0, 0
                                     isValidVort[oldIndex] = 1
                                     obsTick[i] = 0
-
-
 
 
 @ti.kernel
