@@ -211,8 +211,7 @@ def calculate_f_vort():
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
             # vorticity force
-            fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
-                r.norm_sqr()))
+            fVort = (w[x2].cross(ti.Vector([r[0], r[1], 0.0])) * 1.0)
             print(fVort)
             f[x1] += ti.Vector([fVort[0], fVort[1]])
 
@@ -458,14 +457,14 @@ def obstacle_collision():
                             if r < bound:
                                 x_new[x1] = obstacleParticles[
                                                 i] + d / r * bound + COLLISION_EPSILON * ti.random()
-                                if obsTick[i] > VORT_EMIT_INTERVAL:
-                                    oldIndex = ti.atomic_add(vortIndex[0], 1)
-                                    xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
-                                    # xVort[oldIndex] = x_new[x1]
-                                    wVort[oldIndex] = 0, 0, -500
-                                    # wVort[oldIndex] = 0, 0, 0
-                                    isValidVort[oldIndex] = 1
-                                    obsTick[i] = 0
+                            #     if obsTick[i] > VORT_EMIT_INTERVAL:
+                            #         oldIndex = ti.atomic_add(vortIndex[0], 1)
+                            #         xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
+                            #         # xVort[oldIndex] = x_new[x1]
+                            #         wVort[oldIndex] = 0, 0, -500
+                            #         # wVort[oldIndex] = 0, 0, 0
+                            #         isValidVort[oldIndex] = 1
+                            #         obsTick[i] = 0
 
 
 
