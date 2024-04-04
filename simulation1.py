@@ -6,8 +6,8 @@ import numpy as np
 # ti.init(arch=ti.cpu, cpu_max_num_threads=1)
 ti.init(arch=ti.cpu)
 
-NUM_PARTICLES_ROW = 50
-NUM_PARTICLES_COL = 30
+NUM_PARTICLES_ROW = 1
+NUM_PARTICLES_COL = 1
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 NUM_VORTEX_PARTICLES = 100
 VORT_SIGMA = 20
@@ -51,7 +51,9 @@ mouse_pos = (0, 0)
 
 
 # GPU variables
+globalTick = ti.field(dtype=ti.i32, shape=1)
 x = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
+xTrace = ti.Vector.field(2, dtype=ti.f32, shape=2000)
 xVort = ti.Vector.field(2, dtype=ti.f32, shape=NUM_VORTEX_PARTICLES)
 wVort = ti.Vector.field(3, dtype=ti.f32, shape=NUM_VORTEX_PARTICLES)
 isValidVort = ti.field(ti.i32, shape=NUM_VORTEX_PARTICLES)
@@ -78,7 +80,7 @@ num_neighbours = ti.field(ti.i32, shape=NUM_PARTICLES)
 x_display = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
 
 NUM_OBSTACLES = 1
-NUM_OBSTACLE_PARTICLES = NUM_PARTICLES
+NUM_OBSTACLE_PARTICLES = 1500
 # obstacles = ti.Vector.field(2, dtype=ti.f32, shape=NUM_OBSTABLES)
 # obstacle_radius = ti.field(ti.f32, shape=NUM_OBSTABLES)
 obstacleParticles = ti.Vector.field(2, dtype=ti.f32, shape=NUM_OBSTACLE_PARTICLES)
@@ -94,7 +96,7 @@ def reset_particles():
             # We add a random value so that they don't stack exact vertically
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][0] = 250 + j * (WIDTH/NUM_PARTICLES_COL) * 0.3 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][0] = 330 + j * (WIDTH/NUM_PARTICLES_COL) * 0.3 + ti.random()
             x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/30) * 0.3 + ti.random()
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -121,6 +123,9 @@ def reset_particles():
     # xVort[0] = 350, 500
     # wVort[0] = 0, 0, 6000
     # isValidVort[0] = 1
+    globalTick[0] = 0
+    for i in range(2000):
+        xTrace[i] = 0, 0
 
     for i in range(NUM_OBSTACLE_PARTICLES):
         obstacleParticles[i] = 0, 0
@@ -194,19 +199,19 @@ def calculate_f_vort():
         # print(fDragFactor)
         # fDrag = -20.0 * v[x1] * fDragFactor
         # f[x1] += fDrag
-        for i in range(NUM_VORTEX_PARTICLES):
-            if isValidVort[i] == 0:
-                continue
-            r = x_new[x1] - xVort[i]
-            # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
-            fVort = ti.Vector([0.0, 0.0, 0.0])
-            if r.norm() < KERNEL_SIZE:
-                fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
-            # if r.norm_sqr() <= KERNEL_SIZE_SQR:
-            #     print('r {}', r.norm_sqr())
-            #     print('k {}', KERNEL_SIZE_SQR)
-            #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
-            f[x1] += ti.Vector([fVort[0], fVort[1]])
+        # for i in range(NUM_VORTEX_PARTICLES):
+        #     if isValidVort[i] == 0:
+        #         continue
+        #     r = x_new[x1] - xVort[i]
+        #     # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
+        #     fVort = ti.Vector([0.0, 0.0, 0.0])
+        #     if r.norm() < KERNEL_SIZE:
+        #         fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
+        #     # if r.norm_sqr() <= KERNEL_SIZE_SQR:
+        #     #     print('r {}', r.norm_sqr())
+        #     #     print('k {}', KERNEL_SIZE_SQR)
+        #     #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
+        #     f[x1] += ti.Vector([fVort[0], fVort[1]])
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
@@ -248,6 +253,13 @@ def calculate_w():
         w[x1] += delW
         # print(x1)
         # print(gradWx[x1])
+
+        for i in range(NUM_VORTEX_PARTICLES):
+            if isValidVort[i] == 0:
+                continue
+            r = x_new[x1] - xVort[i]
+            if r.norm() < KERNEL_SIZE:
+                w[x1] += (wVort[i] * dt)
 
 
 @ti.kernel
@@ -475,6 +487,8 @@ def update():
     for i in range(NUM_PARTICLES):
         v[i] = (x_new[i] - x[i]) / dt
         x[i] = x_new[i]
+        xTrace[globalTick[0]] = x_new[i]
+    globalTick[0] += 1
 
     # circular_obstacle_collision()
     obstacle_collision()
@@ -524,6 +538,12 @@ def render(gui):
             continue
         gui.circle(pos=xVortDisplay[i], color=PARTICLE_COLOUR,
                    radius=PARTICLE_RADIUS*3 )
+
+    xTraceDisplay = xTrace.to_numpy()
+    xTraceDisplay[:, 0] /= WIDTH
+    xTraceDisplay[:, 1] /= HEIGHT
+    for i in range(2000):
+        gui.circle(pos=xTraceDisplay[i], color=0x000000, radius=PARTICLE_RADIUS)
 
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
