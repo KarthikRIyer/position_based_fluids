@@ -4,7 +4,7 @@ import numpy as np
 ti.init(arch=ti.cpu, cpu_max_num_threads=1)
 # ti.init(arch=ti.gpu)
 FRAME_ITER = 0
-NUM_PARTICLES_ROW = 70
+NUM_PARTICLES_ROW = 30
 NUM_PARTICLES_COL = 100
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 
@@ -129,8 +129,8 @@ def calculate_f_vort():
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
             # vorticity force
-            fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
-                r.norm_sqr()))
+            fVort = (w[x2].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
+                r.norm_sqr()) * 1e3)
             f[x1] += ti.Vector([fVort[0], fVort[1]])
 
 
