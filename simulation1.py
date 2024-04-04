@@ -190,9 +190,9 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
     obstacle_collision()
     box_collision()
 
-    if FRAME_TICK[0] > 200 and isValidVort[0] == 0:
+    if FRAME_TICK[0] > 100 and isValidVort[0] == 0:
         isValidVort[0] = 1
-    if FRAME_TICK[0] > 600 and isValidVort[0] == 1:
+    if FRAME_TICK[0] > 200 and isValidVort[0] == 1:
         isValidVort[0] = 0
 
 
