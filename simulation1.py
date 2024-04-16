@@ -27,7 +27,7 @@ SPIKY_GRAD_CONST = -45 / np.pi / KERNEL_SIZE ** 6
 GRID_SIZE = KERNEL_SIZE
 GRID_SHAPE = (WIDTH // GRID_SIZE + 1, HEIGHT // GRID_SIZE + 1)
 PARTICLE_MASS = 1.0
-RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.15
+RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 1.5
 COLLISION_EPSILON = 1e-3
 LAMBDA_EPSILON = 200
 S_CORR_DELTA_Q = 0.3
@@ -74,7 +74,7 @@ def reset_particles():
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
             x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.9 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.9 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.3 + ti.random()
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             gradWx[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -130,7 +130,7 @@ def calculate_f_vort():
             r = x_new[x1] - x_new[x2]
             # vorticity force
             fVort = (w[x2].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(
-                r.norm_sqr()) * 1e3)
+                r.norm_sqr()) * 1e4)
             f[x1] += ti.Vector([fVort[0], fVort[1]])
 
 
@@ -161,9 +161,10 @@ def calculate_w():
         wDotDelV = ti.Vector(
             [w[x1].dot(gradVx[x1]), w[x1].dot(gradVy[x1]), w[x1].dot(gradVz[x1])])
         niCrossG[x1] = ni[x1].cross(ti.Vector([gravity[0], gravity[1], 0.0]))
-        delWDelT = wDotDelV + (0.1 * niCrossG[x1]) - vDotDelW
+        delWDelT = wDotDelV + (0.0 * niCrossG[x1]) - vDotDelW
         delW = (delWDelT * dt)
-        # dis = w[x1] * 0.1
+        # dis = w[x1]
+        w[x1] *= 0.9
         w[x1] += delW
         # w[x1] -= dis
         # if w[x1][2] > 100.0:
@@ -258,7 +259,7 @@ def solve_iter():
         # if (f[x1][0] == float('nan') or f[x1][1] == float('nan')):
         # print(f[x1])
         # drag force
-        # f[x1] += 0.1 * v[x1] * (1.0 - (rho_i[x1] / RHO_0))
+        f[x1] += 0.1 * v[x1] * (1.0 - (rho_i[x1] / RHO_0))
 
         # C_i = rho_i / RHO_0 - 1
         C_i = rho_i[x1] / RHO_0 - 1
@@ -361,9 +362,15 @@ def render(gui):
     q = x_display.to_numpy()
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
-        r = int(abs(w[i][0]) * 1)
-        g = int(abs(w[i][1]) * 1)
-        b = int(abs(w[i][2]) * 20)
+        # r = int(abs(w[i][0]) * 1)
+        # g = int(abs(w[i][1]) * 1)
+        # b = int(abs(w[i][2]) * 20)
+        print('rhoi {}', rho_i[i])
+        print('rho0 {}', RHO_0)
+        fac = (1.0 - (rho_i[i] / RHO_0))
+        r = 0 if fac < 0.0 else int((rho_i[i] / RHO_0) * 50.0)
+        g = 0
+        b = 0 if fac > 0.0 else int((rho_i[i] / RHO_0) * 50.0)
         # print(niCrossG[i])
         # b = int(0.0 * 255)
         # if (i == 1236):
@@ -401,8 +408,8 @@ if __name__ == '__main__':
             attract = -1
         else:
             attract = 0
-
+        # paused = True
         if not paused:
             simulate(mouse_pos, attract)
-        # paused = True
+        paused = True
         render(gui)
