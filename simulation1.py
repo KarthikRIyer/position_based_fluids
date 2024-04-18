@@ -305,8 +305,8 @@ def solve_iter():
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
-            # s_corr = -S_CORR_K * (poly6_kernel(r.norm_sqr()) * S_CORR_CONST) ** S_CORR_N
-            s_corr = 0.0
+            s_corr = -S_CORR_K * (poly6_kernel(r.norm_sqr()) * S_CORR_CONST) ** S_CORR_N
+            # s_corr = 0.0
             dx[x1] += (lambda_[x1] + lambda_[x2] + s_corr) * spiky_grad_kernel(r)
 
     for x1 in x:
