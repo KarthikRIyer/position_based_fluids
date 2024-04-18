@@ -34,7 +34,7 @@ SPIKY_GRAD_CONST = -45 / np.pi / KERNEL_SIZE ** 6
 GRID_SIZE = KERNEL_SIZE
 GRID_SHAPE = (WIDTH // GRID_SIZE + 1, HEIGHT // GRID_SIZE + 1)
 PARTICLE_MASS = 1.0
-RHO_0 = PARTICLE_MASS * (1.0 * POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 0.5
+RHO_0 = PARTICLE_MASS * (1.0 * POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 1.5
 COLLISION_EPSILON = 1e-3
 LAMBDA_EPSILON = 200
 S_CORR_DELTA_Q = 0.3
@@ -76,6 +76,11 @@ num_particles_in_grid = ti.field(ti.i32, shape=GRID_SHAPE)
 neighbours = ti.field(ti.i32, shape=(NUM_PARTICLES, MAX_NEIGHBOURS))
 num_neighbours = ti.field(ti.i32, shape=NUM_PARTICLES)
 x_display = ti.Vector.field(2, dtype=ti.f32, shape=NUM_PARTICLES)
+
+# num_vort_particles_in_grid = ti.field(ti.i32, shape=GRID_SHAPE)
+# vort_neighbours = ti.field(ti.i32, shape=(NUM_PARTICLES, MAX_NEIGHBOURS))
+# num_vort_neighbours = ti.field(ti.i32, shape=NUM_VORTEX_PARTICLES)
+# vortGrid = ti.field(ti.i32, shape=(GRID_SHAPE[0], GRID_SHAPE[1], MAX_PARTICLES_IN_A_GRID))
 
 NUM_OBSTACLES = 1
 NUM_OBSTACLE_PARTICLES = NUM_PARTICLES
@@ -128,7 +133,7 @@ def reset_particles():
     # obstacle 1
     cx = 350
     cy = 500
-    cr = 20
+    cr = 50
     theta = 4.0 * ti.asin(0.5 * (PARTICLE_RADIUS/cr)) * 0.6
     ang = 0.0
     while ang < 2.0 * math.pi:
@@ -153,6 +158,13 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
             if r_norm > 15:
                 v[i] += attract * dt * 5e6 * r / r_norm ** 3   # F = GMm/|r|^2 * (r/|r|)
 
+    for i in x_new:
+        for nb in range(num_neighbours[i]):
+            j = neighbours[i, nb]
+            vij = v[i] - v[j]
+            r = x[i] - x[j]
+            v[i] += 0.01 * (vij * poly6_kernel(r.norm_sqr()))
+
         x_new[i] = x[i] + dt * v[i]
         gradWx[i] = ti.Vector([0, 0, 0])
         gradWy[i] = ti.Vector([0, 0, 0])
@@ -164,6 +176,7 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
     for i in obsTick:
         obsTick[i] += 1
 
+    # vortex particle advection
     for i in xVort:
         if isValidVort[i] == 0:
             continue
@@ -178,6 +191,15 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
         if vCount > 0.0:
             vVort = vVort / vCount
         xVort[i] += (dt * vVort)
+
+    for i in xVort:
+        for j in range(NUM_OBSTACLE_PARTICLES):
+            if isObsValid[j] == 0:
+                continue
+            r = xVort[i] - obstacleParticles[j]
+            d = r.norm()
+            if d < (PARTICLE_RADIUS + KERNEL_SIZE):
+                xVort[i] += (r/d)*(PARTICLE_RADIUS + KERNEL_SIZE - d)
 
     # circular_obstacle_collision()
     obstacle_collision()
@@ -194,19 +216,19 @@ def calculate_f_vort():
         # print(fDragFactor)
         # fDrag = -20.0 * v[x1] * fDragFactor
         # f[x1] += fDrag
-        # for i in range(NUM_VORTEX_PARTICLES):
-        #     if isValidVort[i] == 0:
-        #         continue
-        #     r = x_new[x1] - xVort[i]
-        #     # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
-        #     fVort = ti.Vector([0.0, 0.0, 0.0])
-        #     if r.norm() < KERNEL_SIZE:
-        #         fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
-        #     # if r.norm_sqr() <= KERNEL_SIZE_SQR:
-        #     #     print('r {}', r.norm_sqr())
-        #     #     print('k {}', KERNEL_SIZE_SQR)
-        #     #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
-        #     f[x1] += ti.Vector([fVort[0], fVort[1]])
+        for i in range(NUM_VORTEX_PARTICLES):
+            if isValidVort[i] == 0:
+                continue
+            r = x_new[x1] - xVort[i]
+            # fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr())) * 1e5
+            fVort = ti.Vector([0.0, 0.0, 0.0])
+            if r.norm() < KERNEL_SIZE:
+                fVort = (wVort[i].cross(ti.Vector([r[0], r[1], 0.0])))
+            # if r.norm_sqr() <= KERNEL_SIZE_SQR:
+            #     print('r {}', r.norm_sqr())
+            #     print('k {}', KERNEL_SIZE_SQR)
+            #     print('poly6_kernel {}', poly6_kernel(r.norm_sqr()))
+            # f[x1] += ti.Vector([fVort[0], fVort[1]])
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
@@ -233,7 +255,7 @@ def calculate_w():
             gradVx[x1] += ((PARTICLE_MASS / rho_i[x2]) * (v[x2][0] * grad3))
             gradVy[x1] += ((PARTICLE_MASS / rho_i[x2]) * (v[x2][1] * grad3))
             gradVz[x1] += ((PARTICLE_MASS / rho_i[x2]) * (0.0 * grad3))
-            ni[x1] += ((PARTICLE_MASS / RHO_0) * (1.0 * grad3))
+            ni[x1] += ((PARTICLE_MASS / rho_i[x2]) * (1.0 * grad3))
         velocity3 = ti.Vector([v[x1][0], v[x1][1], 0.0])
         vDotDelW = ti.Vector([velocity3.dot(gradWx[x1]), velocity3.dot(gradWy[x1]),
                               velocity3.dot(gradWz[x1])])
@@ -243,8 +265,9 @@ def calculate_w():
         wDotDelV = ti.Vector(
             [w[x1].dot(gradVx[x1]), w[x1].dot(gradVy[x1]), w[x1].dot(gradVz[x1])])
         niCrossG[x1] = ni[x1].cross(ti.Vector([gravity[0], gravity[1], 0.0]))
-        delWDelT = wDotDelV + (1 * niCrossG[x1]) - vDotDelW
+        delWDelT = wDotDelV + (0.1 * niCrossG[x1]) - vDotDelW
         delW = (delWDelT * dt)
+        w[x1] *= 0.9
         w[x1] += delW
         # print(x1)
         # print(gradWx[x1])
@@ -465,7 +488,8 @@ def obstacle_collision():
                                                 i] + d / r * bound + COLLISION_EPSILON * ti.random()
                                 if obsTick[i] > VORT_EMIT_INTERVAL:
                                     oldIndex = ti.atomic_add(vortIndex[0], 1)
-                                    xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
+                                    # xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
+                                    xVort[oldIndex] = obstacleParticles[i] + (PARTICLE_RADIUS + KERNEL_SIZE) * (d/r)
                                     # xVort[oldIndex] = x_new[x1]
                                     sign = 1.0 if d[0] > 0 else -1.0
                                     wVort[oldIndex] = 0, 0, sign * 200
@@ -492,9 +516,9 @@ def update():
 
 def simulate(mouse_pos, attract):
     for _ in range(SUBSTEPS):
-        # find_neighbours()
-        apply_external_forces(mouse_pos[0], mouse_pos[1], attract)
         find_neighbours()
+        apply_external_forces(mouse_pos[0], mouse_pos[1], attract)
+        # find_neighbours()
         for _ in range(SOLVE_ITERS):
             solve_iter()
         calculate_f_vort()
@@ -527,13 +551,13 @@ def render(gui):
         if isValidVort[i] == 0:
             continue
         gui.circle(pos=xVortDisplay[i], color=PARTICLE_COLOUR,
-                   radius=PARTICLE_RADIUS*3 )
+                   radius=KERNEL_SIZE )
 
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
-        r = int(abs(niCrossG[i][0]) * 1)
-        g = int(abs(niCrossG[i][1]) * 1)
-        b = int(abs(niCrossG[i][2]) * 1)
+        r = int(abs(w[i][0]) * 1)
+        g = int(abs(w[i][1]) * 1)
+        b = int(abs(w[i][2]) * 20)
         # print(niCrossG[i])
         # b = int(0.0 * 255)
         # if (i == 1236):
