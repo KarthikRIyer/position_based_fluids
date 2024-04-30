@@ -149,7 +149,7 @@ def apply_external_forces(mouse_x: ti.f32, mouse_y: ti.f32, attract: ti.i32):
     # alpha =
     for i in x_new:
         # v[i][1] = v[i][1] + dt * 980   # gravity
-        v[i] = v[i] + dt * ((-0.9 * gravity) + (f[i]/PARTICLE_MASS))
+        v[i] = v[i] + dt * ((-0.2 * gravity) + (f[i]/PARTICLE_MASS))
         f[i] = ti.Vector([0.0, 0.0])
         # mouse interaction
         if attract:
@@ -409,8 +409,8 @@ def solve_iter():
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
             r = x_new[x1] - x_new[x2]
-            # s_corr = -S_CORR_K * (poly6_kernel(r.norm_sqr()) * S_CORR_CONST) ** S_CORR_N
-            s_corr = 0.0
+            s_corr = -S_CORR_K * (poly6_kernel(r.norm_sqr()) * S_CORR_CONST) ** S_CORR_N
+            # s_corr = 0.0
             dx[x1] += (lambda_[x1] + lambda_[x2] + s_corr) * spiky_grad_kernel(r)
 
     for x1 in x:
@@ -489,7 +489,7 @@ def obstacle_collision():
                                 if obsTick[i] > VORT_EMIT_INTERVAL:
                                     oldIndex = ti.atomic_add(vortIndex[0], 1)
                                     # xVort[oldIndex] = obstacleParticles[i] + VORT_SIGMA * (d/r)
-                                    xVort[oldIndex] = obstacleParticles[i] + (PARTICLE_RADIUS + KERNEL_SIZE) * (d/r)
+                                    xVort[oldIndex] = obstacleParticles[i] + (PARTICLE_RADIUS + KERNEL_SIZE*2) * (d/r)
                                     # xVort[oldIndex] = x_new[x1]
                                     sign = 1.0 if d[0] > 0 else -1.0
                                     wVort[oldIndex] = 0, 0, sign * 200
@@ -551,7 +551,7 @@ def render(gui):
         if isValidVort[i] == 0:
             continue
         gui.circle(pos=xVortDisplay[i], color=PARTICLE_COLOUR,
-                   radius=KERNEL_SIZE )
+                   radius=KERNEL_SIZE*2 )
 
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
