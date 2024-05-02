@@ -5,7 +5,7 @@ ti.init(arch=ti.cpu, cpu_max_num_threads=1)
 # ti.init(arch=ti.gpu)
 FRAME_ITER = 0
 NUM_PARTICLES_ROW = 30
-NUM_PARTICLES_COL = 100
+NUM_PARTICLES_COL = 50
 NUM_PARTICLES = NUM_PARTICLES_ROW * NUM_PARTICLES_COL
 
 # GUI
@@ -17,17 +17,21 @@ PARTICLE_RADIUS = 4
 
 # parameters
 SUBSTEPS = 2
-SOLVE_ITERS = 10
+SOLVE_ITERS = 50
 MAX_PARTICLES_IN_A_GRID = 64
-MAX_NEIGHBOURS = 64
-KERNEL_SIZE = 15     # h in Poly6 kernel and Spiky kernel
+MAX_NEIGHBOURS = 32
+# KERNEL_SIZE = 15     # h in Poly6 kernel and Spiky kernel
+KERNEL_SIZE = 20     # h in Poly6 kernel and Spiky kernel
 KERNEL_SIZE_SQR = KERNEL_SIZE * KERNEL_SIZE
 POLY6_CONST = 315 / 64 / np.pi / KERNEL_SIZE ** 9
 SPIKY_GRAD_CONST = -45 / np.pi / KERNEL_SIZE ** 6
 GRID_SIZE = KERNEL_SIZE
 GRID_SHAPE = (WIDTH // GRID_SIZE + 1, HEIGHT // GRID_SIZE + 1)
 PARTICLE_MASS = 1.0
-RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 1.5
+# RHO_0 = PARTICLE_MASS * (POLY6_CONST * (KERNEL_SIZE_SQR) ** 3) * 3.217
+# RHO_0 = 0.0012932730605825782
+RHO_0 = 0.0014934309892327719
+# RHO_0 = 0.0011123062440978946
 COLLISION_EPSILON = 1e-3
 LAMBDA_EPSILON = 200
 S_CORR_DELTA_Q = 0.3
@@ -73,8 +77,10 @@ def reset_particles():
             # We add a random value so that they don't stack exact vertically
             # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * KERNEL_SIZE * 0.2 + ti.random()
             # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * KERNEL_SIZE * 0.2 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.9 + ti.random()
-            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.3 + ti.random()
+            # x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (WIDTH/NUM_PARTICLES_COL) * 0.9 + ti.random()
+            # x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (HEIGHT/NUM_PARTICLES_ROW) * 0.3 + ti.random()
+            x[i * NUM_PARTICLES_COL + j][0] = 20 + j * (2 * PARTICLE_RADIUS)
+            x[i * NUM_PARTICLES_COL + j][1] = 50 + i * (2 * PARTICLE_RADIUS)
             v[i * NUM_PARTICLES_COL + j] = 0, 0
             w[i * NUM_PARTICLES_COL + j] = 0, 0, 0
             gradWx[i * NUM_PARTICLES_COL + j] = 0, 0, 0
@@ -186,28 +192,39 @@ def find_neighbours():
     Note on Taichi: the outer-most for loop in each kernel function is parallelized, therefore we need to use
     atomic add to increment shared table values
     """
-    for i, j in num_particles_in_grid:
-        num_particles_in_grid[i, j] = 0
+    # for i, j in num_particles_in_grid:
+    #     num_particles_in_grid[i, j] = 0
+    #
+    # for i in x:
+    #     grid_idx = int(x_new[i] / GRID_SIZE)
+    #     old = ti.atomic_add(num_particles_in_grid[grid_idx], 1)
+    #     if (old < MAX_PARTICLES_IN_A_GRID):
+    #         grid[grid_idx[0], grid_idx[1], old] = i
+    #
+    # for x1 in x:
+    #     neighbours_idx = 0
+    #     grid_idx = int(x_new[x1] / GRID_SIZE)
+    #     for grid_y in ti.static(range(-1, 2)):
+    #         if 0 <= grid_idx[1] + grid_y < GRID_SHAPE[1]:
+    #             for grid_x in ti.static(range(-1, 2)):
+    #                 if 0 <= grid_idx[0] + grid_x < GRID_SHAPE[0]:
+    #                     for i in range(num_particles_in_grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y]):
+    #                         x2 = grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y, i]
+    #                         if (x_new[x2] - x_new[x1]).norm_sqr() < KERNEL_SIZE_SQR and neighbours_idx < MAX_NEIGHBOURS and x2 != x1:
+    #                             neighbours[x1, neighbours_idx] = x2
+    #                             neighbours_idx += 1
+    #     num_neighbours[x1] = neighbours_idx
 
     for i in x:
-        grid_idx = int(x_new[i] / GRID_SIZE)
-        old = ti.atomic_add(num_particles_in_grid[grid_idx], 1)
-        if (old < MAX_PARTICLES_IN_A_GRID):
-            grid[grid_idx[0], grid_idx[1], old] = i
-
-    for x1 in x:
         neighbours_idx = 0
-        grid_idx = int(x_new[x1] / GRID_SIZE)
-        for grid_y in ti.static(range(-1, 2)):
-            if 0 <= grid_idx[1] + grid_y < GRID_SHAPE[1]:
-                for grid_x in ti.static(range(-1, 2)):
-                    if 0 <= grid_idx[0] + grid_x < GRID_SHAPE[0]:
-                        for i in range(num_particles_in_grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y]):
-                            x2 = grid[grid_idx[0] + grid_x, grid_idx[1] + grid_y, i]
-                            if (x_new[x2] - x_new[x1]).norm_sqr() < KERNEL_SIZE_SQR and neighbours_idx < MAX_NEIGHBOURS and x2 != x1:
-                                neighbours[x1, neighbours_idx] = x2
-                                neighbours_idx += 1
-        num_neighbours[x1] = neighbours_idx
+        for j in range(NUM_PARTICLES):
+            if i == j:
+                continue
+            dist_sqr = (x[i] - x[j]).norm_sqr()
+            if dist_sqr < KERNEL_SIZE_SQR:
+                neighbours[i, neighbours_idx] = j
+                neighbours_idx += 1
+        num_neighbours[i] = neighbours_idx
 
 
 @ti.func
@@ -244,6 +261,8 @@ def solve_iter():
         sum_grad_pk_C_sq = 0.
         # rho_i = poly6_kernel(0)
         rho_i[x1] = poly6_kernel(0)
+        if x1 == 1236:
+            print('poly6(0)', rho_i[x1])
         sum_grad_pi_C = ti.Vector([0., 0.])
         for i in range(num_neighbours[x1]):
             x2 = neighbours[x1, i]
@@ -256,14 +275,18 @@ def solve_iter():
             # # vorti city force
             # fVort = (w[i].cross(ti.Vector([r[0], r[1], 0.0])) * poly6_kernel(r.norm_sqr()))
             # f[x1] += ti.Vector([fVort[0], fVort[1]])
+        if x1 == 1236:
+            print('num neighbors ', num_neighbours[x1])
+            print('density ', rho_i[x1])
         # if (f[x1][0] == float('nan') or f[x1][1] == float('nan')):
         # print(f[x1])
         # drag force
-        f[x1] += 0.1 * v[x1] * (1.0 - (rho_i[x1] / RHO_0))
+        # f[x1] += 0.1 * v[x1] * (1.0 - (rho_i[x1] / RHO_0))
 
         # C_i = rho_i / RHO_0 - 1
         C_i = rho_i[x1] / RHO_0 - 1
-        lambda_[x1] = -C_i / (sum_grad_pk_C_sq + sum_grad_pi_C.norm_sqr() + LAMBDA_EPSILON)
+        lambda_[x1] = -C_i / (sum_grad_pk_C_sq + LAMBDA_EPSILON)
+        # lambda_[x1] = -C_i / (sum_grad_pk_C_sq + sum_grad_pi_C.norm_sqr() + LAMBDA_EPSILON)
 
 
 
@@ -359,30 +382,44 @@ def simulate(mouse_pos, attract):
 
 def render(gui):
     global FRAME_ITER
+    print('==========')
     q = x_display.to_numpy()
+    gui.circle(pos=q[1236], color=PARTICLE_COLOUR, radius=KERNEL_SIZE)
     for i in range(NUM_PARTICLES):
         # col = int('%02x%02x%02x' % (min(int(abs(f[i][0])*256), 256), min(int(abs(f[i][1])*256 ), 256), 256), 16)
         # r = int(abs(w[i][0]) * 1)
         # g = int(abs(w[i][1]) * 1)
         # b = int(abs(w[i][2]) * 20)
-        print('rhoi {}', rho_i[i])
-        print('rho0 {}', RHO_0)
         fac = (1.0 - (rho_i[i] / RHO_0))
-        r = 0 if fac < 0.0 else int((rho_i[i] / RHO_0) * 50.0)
+        if i == 1236:
+            print('rhoi ', rho_i[i])
+            print('rho0 ', RHO_0)
+            print('fac ', fac)
+        r = 0 if fac <= 0.0 else int((rho_i[i] / RHO_0) * 50.0)
         g = 0
-        b = 0 if fac > 0.0 else int((rho_i[i] / RHO_0) * 50.0)
+        b = 0 if fac >= 0.0 else int((rho_i[i] / RHO_0) * 50.0)
         # print(niCrossG[i])
         # b = int(0.0 * 255)
-        # if (i == 1236):
-        #     r = 255
-        #     g = 0
-        #     b = 0
+        if (i == 1236):
+            r = 0
+            g = 0
+            b = 255
+        for j in range(num_neighbours[1236]):
+            k = neighbours[1236, j]
+            if k != i:
+                continue
+            ds = (x[1236] - x[k]).norm_sqr()
+            print('dist_sqr', ds)
+            r = 255
+            g = 255
+            b = 0
         col = int("{0:02x}{1:02x}{2:02x}".format(max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255))), 16)
         # gui.circle(pos=q[i], color=PARTICLE_COLOUR, radius=PARTICLE_RADIUS)
         gui.circle(pos=q[i], color=col, radius=PARTICLE_RADIUS)
     filename = f'./result/frame_{FRAME_ITER:05d}.png'
     FRAME_ITER += 1
     gui.show(filename)
+    print('==========')
 
 
 if __name__ == '__main__':
@@ -408,8 +445,11 @@ if __name__ == '__main__':
             attract = -1
         else:
             attract = 0
+        # for i in range(NUM_PARTICLES):
+        #     x_display[i][0] = x[i][0] / WIDTH
+        #     x_display[i][1] = x[i][1] / HEIGHT
         # paused = True
         if not paused:
             simulate(mouse_pos, attract)
-        paused = True
+        # paused = True
         render(gui)
